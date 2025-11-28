@@ -1,8 +1,11 @@
-# ORIGINAL REPO  https://github.com/damanikjosh/virtualgl-turbovnc-docker/blob/main/Dockerfile 
-ARG UBUNTU_VERSION=22.04
+# ORIGINAL REPO  https://github.com/damanikjosh/virtualgl-turbovnc-docker/blob/main/Dockerfile
+# docker build -t=prusaslicer-novnc .
 
-FROM nvidia/opengl:1.2-glvnd-runtime-ubuntu${UBUNTU_VERSION}
-LABEL authors="vajonam, Michael Helfrich - helfrichmichael"
+# ARG UBUNTU_VERSION=24.04
+
+# FROM nvidia/opengl:1.2-glvnd-runtime-ubuntu${UBUNTU_VERSION}
+FROM debian:stable
+LABEL authors="vajonam, Michael Helfrich - helfrichmichael, t-pierre, jamesjnadea"
 
 ARG VIRTUALGL_VERSION=3.1.1-20240228
 ARG TURBOVNC_VERSION=3.1.1-20240127
@@ -10,28 +13,21 @@ ENV DEBIAN_FRONTEND noninteractive
 
 # Install some basic dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget xorg xauth gosu supervisor x11-xserver-utils libegl1-mesa libgl1-mesa-glx \
+    wget xorg xauth gosu supervisor x11-xserver-utils  \
     locales-all libpam0g libxt6 libxext6 dbus-x11 xauth x11-xkb-utils xkb-data python3 xterm novnc \
-    lxde gtk2-engines-murrine gnome-themes-standard gtk2-engines-pixbuf gtk2-engines-murrine arc-theme \
-    freeglut3 libgtk2.0-dev libwxgtk3.0-gtk3-dev libwx-perl libxmu-dev libgl1-mesa-glx libgl1-mesa-dri  \
-    xdg-utils locales locales-all pcmanfm jq curl git bzip2 gpg-agent software-properties-common \
+    lxde \
+    # gtk2-engines-murrine gnome-themes-standard gtk2-engines-pixbuf gtk2-engines-murrine arc-theme \
+    #freeglut3 libgtk2.0-dev libwxgtk3.0-gtk3-dev libwx-perl libxmu-dev libgl1-mesa-glx libgl1-mesa-dri  \
+    xdg-utils locales locales-all pcmanfm jq curl git bzip2 gpg-agent \
     # Packages needed to build PrusaSlicer from source.
     unzip build-essential autoconf cmake texinfo \
-    libglu1-mesa-dev libgtk-3-dev libdbus-1-dev libwebkit2gtk-4.1-dev \
-    # added by James
+    libgtk-3-dev libdbus-1-dev libwebkit2gtk-4.1-dev \
+    # added to support/transition to debian
     libboost-system-dev libboost-thread-dev libboost-program-options-dev libboost-test-dev \
-    # Packages needed to support the AppImage changes. The libnvidia-egl-gbm1 package resolves an issue
-    # where GPU acceleration resulted in blank windows being generated.
-    libnvidia-egl-gbm1 \
-    && mkdir -p /usr/share/desktop-directories \
-    # Install Firefox without Snap.
-    && add-apt-repository ppa:mozillateam/ppa \
-    && apt update \
-    && apt install -y firefox-esr --no-install-recommends \
-    # Clean everything up.
-    && apt autoclean -y \
-    && apt autoremove -y \
-    && rm -rf /var/lib/apt/lists/*
+    libgl1 libglx-mesa0 \
+    firefox-esr gnupg automake texinfo libtool
+    
+RUN mkdir -p /usr/share/desktop-directories 
 
 RUN locale-gen en_US.UTF-8 && \
     update-locale LANG=en_US.UTF-8
@@ -41,27 +37,43 @@ ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
 # Install VirtualGL and TurboVNC
-RUN wget -qO /tmp/virtualgl_${VIRTUALGL_VERSION}_amd64.deb https://packagecloud.io/dcommander/virtualgl/packages/any/any/virtualgl_${VIRTUALGL_VERSION}_amd64.deb/download.deb?distro_version_id=35\
-    && wget -qO /tmp/turbovnc_${TURBOVNC_VERSION}_amd64.deb https://packagecloud.io/dcommander/turbovnc/packages/any/any/turbovnc_${TURBOVNC_VERSION}_amd64.deb/download.deb?distro_version_id=35 \
-    && dpkg -i /tmp/virtualgl_${VIRTUALGL_VERSION}_amd64.deb \
-    && dpkg -i /tmp/turbovnc_${TURBOVNC_VERSION}_amd64.deb \
-    && rm -rf /tmp/*.deb
+# RUN wget -qO /tmp/virtualgl_${VIRTUALGL_VERSION}_amd64.deb https://packagecloud.io/dcommander/virtualgl/packages/any/any/virtualgl_${VIRTUALGL_VERSION}_amd64.deb/download.deb?distro_version_id=35\
+#     && wget -qO /tmp/turbovnc_${TURBOVNC_VERSION}_amd64.deb https://packagecloud.io/dcommander/turbovnc/packages/any/any/turbovnc_${TURBOVNC_VERSION}_amd64.deb/download.deb?distro_version_id=35 \
+#     && dpkg -i /tmp/virtualgl_${VIRTUALGL_VERSION}_amd64.deb \
+#     && dpkg -i /tmp/turbovnc_${TURBOVNC_VERSION}_amd64.deb \
+#     && rm -rf /tmp/*.deb
+# VirtualGL, see https://virtualgl.org/Downloads/YUM
+RUN wget -q -O- https://packagecloud.io/dcommander/virtualgl/gpgkey | \
+  gpg --dearmor >/etc/apt/trusted.gpg.d/VirtualGL.gpg \
+  && wget -q -O /etc/apt/sources.list.d/VirtualGL.list https://raw.githubusercontent.com/VirtualGL/repo/main/VirtualGL.list \
+  && wget -q -O- https://packagecloud.io/dcommander/turbovnc/gpgkey | \
+# TurboVNC, see https://turbovnc.org/Downloads/YUM
+  gpg --dearmor >/etc/apt/trusted.gpg.d/TurboVNC.gpg \
+  && wget -q -O /etc/apt/sources.list.d/TurboVNC.list https://raw.githubusercontent.com/TurboVNC/repo/main/TurboVNC.list \
+  && apt update \
+  && apt install -y virtualgl turbovnc
+  
+
+  # Clean everything up.
+RUN apt autoclean -y \
+    && apt autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
     # # Install PrusaSlicer from source
 WORKDIR /slic3r
-RUN latestSlic3r=$(curl -SsL https://api.github.com/repos/prusa3d/PrusaSlicer/releases/latest | jq -r '.zipball_url') && wget ${latestSlic3r} -O /tmp/PrusaSlicer.zip 
-RUN unzip /tmp/PrusaSlicer.zip -d /tmp/extracted 
-RUN mv /tmp/extracted/* ./PrusaSlicer 
-RUN rm /tmp/PrusaSlicer.zip && rmdir /tmp/extracted 
+RUN latestSlic3r=$(curl -SsL https://api.github.com/repos/prusa3d/PrusaSlicer/releases/latest | jq -r '.zipball_url') && wget ${latestSlic3r} -O /tmp/PrusaSlicer.zip \
+    && unzip /tmp/PrusaSlicer.zip -d /tmp/extracted \
+    && mv /tmp/extracted/* ./PrusaSlicer \
+    && rm /tmp/PrusaSlicer.zip && rmdir /tmp/extracted 
 WORKDIR /slic3r/PrusaSlicer/deps 
-RUN mkdir build && cd build 
-RUN cmake .. -DDEP_WX_GTK3=ON && make 
-WORKDIR /slic3r/PrusaSlicer/deps
-RUN mkdir build && cd build 
-RUN cmake .. -DSLIC3R_STATIC=1 -DSLIC3R_GTK=3 -DSLIC3R_PCH=OFF -DCMAKE_PREFIX_PATH=$(pwd)/../deps/build/destdir/usr/local 
-RUN make -j4 
-RUN  cd ../.. 
-RUN  rm -rf PrusaSlicer/deps/build PrusaSlicer/build/tests
+RUN mkdir build && cd build \
+    && cmake .. -DDEP_WX_GTK3=ON && make 
+WORKDIR /slic3r/PrusaSlicer/
+RUN mkdir build && cd build \
+    && cmake .. -DSLIC3R_STATIC=1 -DSLIC3R_GTK=3 -DSLIC3R_PCH=OFF -DCMAKE_PREFIX_PATH=$(pwd)/../deps/build/destdir/usr/local \
+    & make -j4 \
+    && cd ../.. \
+    && rm -rf PrusaSlicer/deps/build PrusaSlicer/build/tests
 
 RUN groupadd slic3r \
     && useradd -g slic3r --create-home --home-dir /home/slic3r slic3r \
