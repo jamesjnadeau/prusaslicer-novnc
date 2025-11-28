@@ -25,4 +25,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: mikeah/prusaslicer-novnc:latest, mikeah/prusaslicer-novnc:${{ steps.date.outputs.date }}
+          tags: jamesjnadeau/prusaslicer-novnc:latest, jamesjnadeau/prusaslicer-novnc:${{ steps.date.outputs.date }}
